@@ -1,0 +1,83 @@
+## gateway.yaml  
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: abdigital-uat-gateway
+  namespace: nginx-gateway
+spec:
+  gatewayClassName: nginx 
+  listeners:
+ 
+  - name: cms-https
+    protocol: HTTPS
+    port: 443
+    hostname: "sandbox-cms-gw.airborneo.com"
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - kind: Secret
+        group: ""
+        name: airborneo-cms-tls
+        namespace: airborneo-cms-uat
+    allowedRoutes:
+      namespaces:
+        from: All 
+
+  - name: cms-http
+    hostname: "sandbox-cms-gw.airborneo.com"
+    port: 80
+    protocol: HTTP
+    allowedRoutes:
+      namespaces:
+        from: All     
+
+  - name: web-http
+    hostname: "sandbox-gw.airborneo.com"
+    port: 80
+    protocol: HTTP
+    allowedRoutes:
+      namespaces:
+        from: All     
+  - name: web-https
+    protocol: HTTPS
+    port: 443
+    hostname: "sandbox-gw.airborneo.com"
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - kind: Secret
+        group: ""
+        name: airborneo-web-tls
+        namespace: airborneo-web-uat
+    allowedRoutes:
+      namespaces:
+        from: All 
+
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-nginx-gateway-to-ref-secrets
+  namespace: airborneo-cms-uat
+spec:
+  from:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    namespace: nginx-gateway 
+  to:
+  - group: ""
+    kind: Secret
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-nginx-gateway-to-ref-secrets
+  namespace: airborneo-web-uat
+spec:
+  from:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    namespace: nginx-gateway 
+  to:
+  - group: ""
+    kind: Secret
