@@ -1,0 +1,50 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: abdigital-gateway
+  namespace: nginx-gateway
+spec: 
+  gatewayClassName: nginx
+  listeners:
+  - name: cms-https
+    hostname: "sandbox-cms-gw.airborneo.com" 
+
+  - name: cms-http
+    hostname: "sandbox-cms-gw.airborneo.com"
+     
+
+  - name: web-http
+    hostname: "sandbox-gw.airborneo.com"
+    
+  - name: web-https
+    hostname: "sandbox-gw.airborneo.com"
+    
+
+# ---
+# apiVersion: gateway.networking.k8s.io/v1beta1
+# kind: ReferenceGrant
+# metadata:
+#   name: allow-nginx-gateway-to-ref-secrets
+#   namespace: airborneo-cms-uat
+# spec:
+#   from:
+#   - group: gateway.networking.k8s.io
+#     kind: Gateway
+#     namespace: nginx-gateway 
+#   to:
+#   - group: ""
+#     kind: Secret
+# ---
+# apiVersion: gateway.networking.k8s.io/v1beta1
+# kind: ReferenceGrant
+# metadata:
+#   name: allow-nginx-gateway-to-ref-secrets
+#   namespace: airborneo-web-uat
+# spec:
+#   from:
+#   - group: gateway.networking.k8s.io
+#     kind: Gateway
+#     namespace: nginx-gateway 
+#   to:
+#   - group: ""
+#     kind: Secret

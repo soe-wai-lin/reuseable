@@ -1,8 +1,7 @@
-## gateway.yaml  
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: abdigital-uat-gateway
+  name: abdigital-gateway
   namespace: nginx-gateway
 spec:
   gatewayClassName: nginx 
@@ -11,7 +10,7 @@ spec:
   - name: cms-https
     protocol: HTTPS
     port: 443
-    hostname: "sandbox-cms-gw.airborneo.com"
+    hostname: "example.com"  
     tls:
       mode: Terminate
       certificateRefs:
@@ -24,7 +23,7 @@ spec:
         from: All 
 
   - name: cms-http
-    hostname: "sandbox-cms-gw.airborneo.com"
+    hostname: "example.com"   
     port: 80
     protocol: HTTP
     allowedRoutes:
@@ -32,7 +31,7 @@ spec:
         from: All     
 
   - name: web-http
-    hostname: "sandbox-gw.airborneo.com"
+    hostname: "example.com"       
     port: 80
     protocol: HTTP
     allowedRoutes:
@@ -41,7 +40,7 @@ spec:
   - name: web-https
     protocol: HTTPS
     port: 443
-    hostname: "sandbox-gw.airborneo.com"
+    hostname: "example.com"        
     tls:
       mode: Terminate
       certificateRefs:
@@ -53,31 +52,31 @@ spec:
       namespaces:
         from: All 
 
----
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: ReferenceGrant
-metadata:
-  name: allow-nginx-gateway-to-ref-secrets
-  namespace: airborneo-cms-uat
-spec:
-  from:
-  - group: gateway.networking.k8s.io
-    kind: Gateway
-    namespace: nginx-gateway 
-  to:
-  - group: ""
-    kind: Secret
----
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: ReferenceGrant
-metadata:
-  name: allow-nginx-gateway-to-ref-secrets
-  namespace: airborneo-web-uat
-spec:
-  from:
-  - group: gateway.networking.k8s.io
-    kind: Gateway
-    namespace: nginx-gateway 
-  to:
-  - group: ""
-    kind: Secret
+# ---
+# apiVersion: gateway.networking.k8s.io/v1beta1
+# kind: ReferenceGrant
+# metadata:
+#   name: allow-nginx-gateway-to-ref-secrets
+#   namespace: airborneo-cms-uat
+# spec:
+#   from:
+#   - group: gateway.networking.k8s.io
+#     kind: Gateway
+#     namespace: nginx-gateway 
+#   to:
+#   - group: ""
+#     kind: Secret
+# ---
+# apiVersion: gateway.networking.k8s.io/v1beta1
+# kind: ReferenceGrant
+# metadata:
+#   name: allow-nginx-gateway-to-ref-secrets
+#   namespace: airborneo-web-uat
+# spec:
+#   from:
+#   - group: gateway.networking.k8s.io
+#     kind: Gateway
+#     namespace: nginx-gateway 
+#   to:
+#   - group: ""
+#     kind: Secret

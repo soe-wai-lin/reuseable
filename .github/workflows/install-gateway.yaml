@@ -1,0 +1,162 @@
+name: Deploy Gateway-API
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Target environment (production, staging, development)'
+        required: true
+        type: string
+          #      digest:
+          #        description: 'Image digest to deploy (e.g., sha256:abcd1234...). This takes precedence over the hash field.'
+          #        required: false
+          #        type: string
+          #      hash:
+          #        description: 'Commit hash (full) to deploy (e.g., abcd1234...)'
+          #        required: false
+          #        type: string
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: environment
+          #      digest:
+          #        description: 'Image digest to deploy (e.g., sha256:abcd1234...). This takes precedence over the hash field.'
+          #        required: false
+          #        type: string
+          #      hash:
+          #        description: 'Commit hash (full) to deploy (e.g., abcd1234...)'
+          #        required: false
+          #        type: string
+
+env:
+  ENVIRONMENT: ${{ inputs.environment }}
+    #  HASH: ${{ inputs.hash || github.sha }}
+    #  DIGEST: ${{ inputs.digest || '' }}
+    #  REGISTRY_PATH: ocir.${{ vars.OCI_REGION }}.oci.oraclecloud.com/${{ vars.OCIR_TENANCY_NAMESPACE }}/${{ vars.OCIR_REPOSITORY }}
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install OCI CLI
+        run: |
+          # Download and install OCI CLI
+          curl -L https://raw.githubusercontent.com/oracle/oci-cli/master/scripts/install/install.sh | bash -s -- --accept-all-defaults
+          # Add to PATH for current session
+          echo "$HOME/bin" >> $GITHUB_PATH
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Set up Kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+
+          #      - name: Retrieve namespace
+          #        id: namespace
+          #        run: |
+          #          NAMESPACE=$(
+          #            cat ci/k8s/environments/$ENVIRONMENT/namespace.yaml \
+          #              | grep 'name:' \
+          #              | awk '{print $2}'
+          #          )
+          #          echo "NAMESPACE=$NAMESPACE" >> $GITHUB_ENV
+          #          echo "namespace=$NAMESPACE" >> $GITHUB_OUTPUT
+
+      - name: Configure Oracle Cloud and Kubernetes access
+        run: |
+          # Setup OCI config
+          mkdir -p ~/.oci
+          echo "${{ vars.OCI_CONFIG }}" | base64 -d > ~/.oci/config
+          echo "${{ secrets.OCI_CLI_PRIVATE_KEY }}" | base64 -d > ~/.oci/github_actions.pem
+          chmod 600 ~/.oci/github_actions.pem ~/.oci/config
+
+          # Setup SSH key for Bastion access
+          mkdir -p ~/.ssh
+          echo "${{ secrets.OCI_BASTION_PRIVATE_KEY }}" | base64 -d > ~/.ssh/oci_bastion_key
+          chmod 600 ~/.ssh/oci_bastion_key
+
+          # Setup SSH config for Bastion
+          echo "Host bastion" >> ~/.ssh/config
+          echo "  HostName ${{ vars.OCI_BASTION_IP }}" >> ~/.ssh/config
+          echo "  User ${{ vars.OCI_BASTION_USER }}" >> ~/.ssh/config
+          echo "  IdentityFile ~/.ssh/oci_bastion_key" >> ~/.ssh/config
+          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+          echo "  LocalForward 6443 ${{ vars.OCI_OKE_CLUSTER_PRIVATE_IP }}:6443" >> ~/.ssh/config
+          chmod 600 ~/.ssh/config
+
+          # Start SSH tunnel through Bastion for OKE cluster access
+          ssh -f -N bastion
+
+          # Get kubeconfig for OKE cluster (using localhost due to SSH tunnel)
+          oci ce cluster create-kubeconfig \
+            --cluster-id ${{ vars.OCI_OKE_CLUSTER_ID }} \
+            --file ~/.kube/config \
+            --region ${{ vars.OCI_REGION }} \
+            --token-version 2.0.0 \
+            --kube-endpoint PRIVATE_ENDPOINT
+
+          # Update kubeconfig to use localhost (SSH tunnel endpoint)
+          sed -i 's/https:\/\/[^:]\+:6443/https:\/\/127.0.0.1:6443/g' ~/.kube/config
+
+      - name: Verify cluster connection
+        run: |
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Ensure Gateway in nginx-gateway namespace or not
+        run: |
+          kubectl get gateway -n nginx-gateway 
+
+          #      - name: Ensure cluster dependencies are installed
+          #        run: |
+          #          # Setup Ingress Controller
+          #          helm upgrade --install ingress-nginx ingress-nginx \
+          #            --repo https://kubernetes.github.io/ingress-nginx \
+          #            --namespace ingress-nginx \
+          #            --create-namespace \
+          #            && echo "NGINX Ingress Controller installed!" \
+          #            || echo "NGINX Ingress Controller is already installed!"
+          #
+          #          # Setup OCI Secret Store CSI Driver Provider
+          #          helm upgrade --install csi-secrets-store-provider-oci oci-secrets-store-csi-driver-provider \
+          #            --repo https://oracle.github.io/oci-secrets-store-csi-driver-provider/charts \
+          #            --namespace secrets-store-oci \
+          #            --create-namespace \
+          #            --set secrets-store-csi-driver.syncSecret.enabled=true \
+          #            --set secrets-store-csi-driver.enableSecretRotation=true \
+          #            && echo "OCI Secrets Store CSI Driver Provider installed!" \
+          #            || echo "OCI Secrets Store CSI Driver Provider is already installed!"
+          #
+
+      - name: Validate Kubernetes manifests
+        run: |
+          cd ci/environments/$ENVIRONMENT
+          kustomize build . | kubectl apply --dry-run=client -f -
+
+      - name: Deploy to Kubernetes
+        run: |
+          # Verify current kubectl context
+          kubectl config get-contexts
+      
+          # Install gateway-api into nginx-gateway namespace
+          cd ci/environments/$ENVIRONMENT
+          kustomize build . | kubectl apply -f -
+
+
+      - name: Get Gateway-Api status
+        run: kubectl get gateway -n nginx-gateway
+
+      - name: Clean up SSH tunnel
+        if: always()
+        run: |
+          kill $(lsof -t -i :6443) || true

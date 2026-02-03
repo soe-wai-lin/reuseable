@@ -1,0 +1,67 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: abdigital-gateway
+  namespace: nginx-gateway
+spec: 
+  gatewayClassName: nginx
+  listeners:
+  - name: cms-https
+    hostname: "dev-cms-gw.airborneo.com"  
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - kind: Secret
+        group: ""
+        name: airborneo-cms-tls
+        namespace: airborneo-cms-dev
+   
+
+  - name: cms-http
+    hostname: "dev-cms-gw.airborneo.com"   
+       
+
+  - name: web-http
+    hostname: "dev-gw.airborneo.com"       
+    
+  - name: web-https
+    hostname: "dev-gw.airborneo.com"        
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - kind: Secret
+        group: ""
+        name: airborneo-web-tls
+        namespace: airborneo-web-dev
+    
+    
+
+# ---
+# apiVersion: gateway.networking.k8s.io/v1beta1
+# kind: ReferenceGrant
+# metadata:
+#   name: allow-nginx-gateway-to-ref-secrets
+#   namespace: airborneo-cms-uat
+# spec:
+#   from:
+#   - group: gateway.networking.k8s.io
+#     kind: Gateway
+#     namespace: nginx-gateway 
+#   to:
+#   - group: ""
+#     kind: Secret
+# ---
+# apiVersion: gateway.networking.k8s.io/v1beta1
+# kind: ReferenceGrant
+# metadata:
+#   name: allow-nginx-gateway-to-ref-secrets
+#   namespace: airborneo-web-uat
+# spec:
+#   from:
+#   - group: gateway.networking.k8s.io
+#     kind: Gateway
+#     namespace: nginx-gateway 
+#   to:
+#   - group: ""
+#     kind: Secret
+
