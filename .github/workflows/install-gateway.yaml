@@ -61,16 +61,6 @@ jobs:
           curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
           sudo mv kustomize /usr/local/bin/
 
-          #      - name: Retrieve namespace
-          #        id: namespace
-          #        run: |
-          #          NAMESPACE=$(
-          #            cat ci/k8s/environments/$ENVIRONMENT/namespace.yaml \
-          #              | grep 'name:' \
-          #              | awk '{print $2}'
-          #          )
-          #          echo "NAMESPACE=$NAMESPACE" >> $GITHUB_ENV
-          #          echo "namespace=$NAMESPACE" >> $GITHUB_OUTPUT
 
       - name: Configure Oracle Cloud and Kubernetes access
         run: |
@@ -113,30 +103,52 @@ jobs:
           kubectl cluster-info
           kubectl get nodes
 
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Check if Gateway API already exists
+        id: gateway_check
+        shell: bash
+        run: |
+          set +e
+
+          echo "Checking GatewayClass..."
+          kubectl get gatewayclass nginx >/dev/null 2>&1
+          GC_EXISTS=$?
+
+          echo "Checking Gateway in namespace nginx-gateway..."
+          kubectl get gateway -n nginx-gateway >/dev/null 2>&1
+          GW_EXISTS=$?
+
+          if [[ $GC_EXISTS -eq 0 && $GW_EXISTS -eq 0 ]]; then
+            echo "Gateway API already installed. Skipping."
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "Gateway API not fully installed. Proceeding."
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install Gateway API CRDs
+        if: steps.gateway_check.outputs.skip == 'false'
+        run: |
+          kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.1/standard-install.yaml
+
+      - name: Install NGINX Gateway Fabric Gateway Class
+        if: steps.gateway_check.outputs.skip == 'false'
+        run: |
+          kubectl create namespace nginx-gateway --dry-run=client -o yaml | kubectl apply -f -
+
+          helm upgrade --install ngf \
+            oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
+            --namespace nginx-gateway \
+            --create-namespace
+
       - name: Ensure Gateway in nginx-gateway namespace or not
         run: |
           kubectl get gateway -n nginx-gateway 
 
-          #      - name: Ensure cluster dependencies are installed
-          #        run: |
-          #          # Setup Ingress Controller
-          #          helm upgrade --install ingress-nginx ingress-nginx \
-          #            --repo https://kubernetes.github.io/ingress-nginx \
-          #            --namespace ingress-nginx \
-          #            --create-namespace \
-          #            && echo "NGINX Ingress Controller installed!" \
-          #            || echo "NGINX Ingress Controller is already installed!"
-          #
-          #          # Setup OCI Secret Store CSI Driver Provider
-          #          helm upgrade --install csi-secrets-store-provider-oci oci-secrets-store-csi-driver-provider \
-          #            --repo https://oracle.github.io/oci-secrets-store-csi-driver-provider/charts \
-          #            --namespace secrets-store-oci \
-          #            --create-namespace \
-          #            --set secrets-store-csi-driver.syncSecret.enabled=true \
-          #            --set secrets-store-csi-driver.enableSecretRotation=true \
-          #            && echo "OCI Secrets Store CSI Driver Provider installed!" \
-          #            || echo "OCI Secrets Store CSI Driver Provider is already installed!"
-          #
 
       - name: Validate Kubernetes manifests
         run: |
